@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAccount } from "wagmi";
 
 const navItems = [
   {
@@ -54,6 +55,12 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { address, isConnected } = useAccount();
+
+  // Format address for display
+  const formatAddress = (addr: string) => {
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-bg-secondary border-r border-border-subtle flex flex-col z-50">
@@ -101,12 +108,26 @@ export function Sidebar() {
       {/* Wallet Status */}
       <div className="p-4 border-t border-border-subtle">
         <div className="card-elevated p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
-            <span className="text-xs font-medium text-status-success">Connected</span>
-          </div>
-          <p className="text-sm text-text-secondary mb-1">Wallet</p>
-          <p className="address text-xs truncate">0x1234...5678</p>
+          {isConnected && address ? (
+            <>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
+                <span className="text-xs font-medium text-status-success">Connected</span>
+              </div>
+              <p className="text-sm text-text-secondary mb-1">Your Wallet</p>
+              <p className="address text-xs truncate">{formatAddress(address)}</p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-2 h-2 rounded-full bg-text-muted" />
+                <span className="text-xs font-medium text-text-muted">Not Connected</span>
+              </div>
+              <p className="text-sm text-text-secondary">
+                Connect your wallet to interact with the multisig
+              </p>
+            </>
+          )}
         </div>
       </div>
     </aside>
