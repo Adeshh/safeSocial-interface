@@ -2,55 +2,73 @@
 
 import { useState } from "react";
 import { useAccount, useDisconnect } from "wagmi";
+import { type Address } from "viem";
 import { useSafeWallet, type SafeWallet } from "../context/SafeWalletContext";
-
-// Mock data - will be replaced with database queries
-const mockWallets: SafeWallet[] = [
-  {
-    address: "0x742d35Cc6634C0532925a3b844Bc9e7595f8bE2a",
-    name: "Treasury Wallet",
-    threshold: 2,
-    owners: 3,
-    balance: "5.25 ETH",
-    createdAt: "Jan 15, 2026",
-  },
-  {
-    address: "0xAbC123456789dEf0123456789AbCdEf012345678",
-    name: "Development Fund",
-    threshold: 3,
-    owners: 5,
-    balance: "12.8 ETH",
-    createdAt: "Jan 10, 2026",
-  },
-];
+import { useWallets, useCreateWallet, useWalletDetails } from "../hooks";
 
 export function WalletSelectionView() {
   const { address } = useAccount();
   const { disconnect } = useDisconnect();
   const { setSelectedWallet } = useSafeWallet();
+  const { wallets, isLoading, error, refetch } = useWallets();
+  const { createWallet, isCreating, error: createError } = useCreateWallet();
+  
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newWalletName, setNewWalletName] = useState("");
+  const [viewAddress, setViewAddress] = useState("");
 
   const formatAddress = (addr: string) => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  const handleSelectWallet = (wallet: SafeWallet) => {
-    setSelectedWallet(wallet);
+  const handleSelectWallet = (wallet: typeof wallets[0]) => {
+    setSelectedWallet({
+      address: wallet.address as Address,
+      name: wallet.name || "SafeSocial Wallet",
+      threshold: wallet.threshold,
+      owners: wallet.owners,
+      balance: "0 ETH", // Will be fetched from chain
+      createdAt: wallet.createdAt,
+    });
   };
 
-  const handleCreateWallet = () => {
-    // Mock create - will be replaced with actual contract deployment
-    const newWallet: SafeWallet = {
-      address: `0x${Math.random().toString(16).slice(2, 10)}...${Math.random().toString(16).slice(2, 6)}`,
-      name: newWalletName || "New SafeSocial Wallet",
-      threshold: 1,
-      owners: 1,
+  const handleCreateWallet = async () => {
+    if (!address) return;
+
+    const walletAddress = await createWallet(
+      [address], // Initial owner is the creator
+      1, // Initial threshold of 1
+      newWalletName || "SafeSocial Wallet"
+    );
+
+    if (walletAddress) {
+      setShowCreateModal(false);
+      setNewWalletName("");
+      // Refetch wallets and select the new one
+      await refetch();
+      setSelectedWallet({
+        address: walletAddress,
+        name: newWalletName || "SafeSocial Wallet",
+        threshold: 1,
+        owners: 1,
+        balance: "0 ETH",
+        createdAt: new Date().toISOString(),
+      });
+    }
+  };
+
+  const handleViewWallet = () => {
+    if (!viewAddress || !viewAddress.startsWith("0x")) return;
+    
+    // For viewing any wallet (even if not an owner)
+    setSelectedWallet({
+      address: viewAddress as Address,
+      name: "Viewed Wallet",
+      threshold: 0, // Will be fetched
+      owners: 0, // Will be fetched
       balance: "0 ETH",
-      createdAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    };
-    setSelectedWallet(newWallet);
-    setShowCreateModal(false);
+      createdAt: "",
+    });
   };
 
   return (
@@ -94,13 +112,34 @@ export function WalletSelectionView() {
           </div>
         </div>
 
+        {/* Error Display */}
+        {(error || createError) && (
+          <div className="card p-4 mb-6 border-status-error/30 bg-status-error/10">
+            <p className="text-status-error text-sm">{error || createError}</p>
+          </div>
+        )}
+
         {/* Wallet List */}
         <div className="space-y-4 mb-6">
           <h2 className="text-lg font-semibold text-text-primary">Your Wallets</h2>
           
-          {mockWallets.length > 0 ? (
+          {isLoading ? (
             <div className="space-y-3">
-              {mockWallets.map((wallet) => (
+              {[1, 2].map((i) => (
+                <div key={i} className="card p-5">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl skeleton" />
+                    <div className="flex-1">
+                      <div className="h-5 w-32 skeleton mb-2" />
+                      <div className="h-4 w-24 skeleton" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : wallets.length > 0 ? (
+            <div className="space-y-3">
+              {wallets.map((wallet) => (
                 <button
                   key={wallet.address}
                   onClick={() => handleSelectWallet(wallet)}
@@ -116,15 +155,23 @@ export function WalletSelectionView() {
                         </svg>
                       </div>
                       <div>
-                        <h3 className="font-semibold text-text-primary mb-1">{wallet.name}</h3>
-                        <p className="text-sm font-mono text-text-muted">{formatAddress(wallet.address)}</p>
+                        <h3 className="font-semibold text-text-primary mb-1">
+                          {wallet.name || "SafeSocial Wallet"}
+                        </h3>
+                        <p className="text-sm font-mono text-text-muted">
+                          {formatAddress(wallet.address)}
+                        </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold text-text-primary">{wallet.balance}</p>
                       <p className="text-sm text-text-muted">
                         {wallet.threshold}/{wallet.owners} signers
                       </p>
+                      {wallet.pendingTxCount > 0 && (
+                        <p className="text-sm text-status-pending">
+                          {wallet.pendingTxCount} pending
+                        </p>
+                      )}
                     </div>
                   </div>
                 </button>
@@ -149,7 +196,8 @@ export function WalletSelectionView() {
         {/* Create New Wallet Button */}
         <button
           onClick={() => setShowCreateModal(true)}
-          className="w-full card p-5 border-dashed border-2 border-border-default hover:border-accent-primary/50 transition-all group"
+          disabled={isCreating}
+          className="w-full card p-5 border-dashed border-2 border-border-default hover:border-accent-primary/50 transition-all group disabled:opacity-50"
         >
           <div className="flex items-center justify-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-bg-tertiary flex items-center justify-center group-hover:bg-accent-primary/10 transition-colors">
@@ -158,7 +206,7 @@ export function WalletSelectionView() {
               </svg>
             </div>
             <span className="font-medium text-text-secondary group-hover:text-text-primary transition-colors">
-              Create New SafeSocial Wallet
+              {isCreating ? "Creating..." : "Create New SafeSocial Wallet"}
             </span>
           </div>
         </button>
@@ -169,10 +217,16 @@ export function WalletSelectionView() {
           <div className="flex gap-3">
             <input
               type="text"
+              value={viewAddress}
+              onChange={(e) => setViewAddress(e.target.value)}
               placeholder="Enter SafeSocial wallet address (0x...)"
               className="input flex-1 font-mono text-sm"
             />
-            <button className="btn-secondary px-6">
+            <button 
+              onClick={handleViewWallet}
+              disabled={!viewAddress.startsWith("0x")}
+              className="btn-secondary px-6 disabled:opacity-50"
+            >
               View
             </button>
           </div>
@@ -184,7 +238,7 @@ export function WalletSelectionView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowCreateModal(false)}
+            onClick={() => !isCreating && setShowCreateModal(false)}
           />
           <div className="relative w-full max-w-md mx-4 card p-6 animate-fade-in">
             <div className="flex items-center justify-between mb-6">
@@ -192,8 +246,9 @@ export function WalletSelectionView() {
                 Create New Wallet
               </h2>
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => !isCreating && setShowCreateModal(false)}
                 className="btn-ghost p-2"
+                disabled={isCreating}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 6 6 18" />
@@ -213,6 +268,7 @@ export function WalletSelectionView() {
                   onChange={(e) => setNewWalletName(e.target.value)}
                   placeholder="e.g., Team Treasury"
                   className="input"
+                  disabled={isCreating}
                 />
               </div>
 
@@ -226,23 +282,41 @@ export function WalletSelectionView() {
                   Initial Setup
                 </div>
                 <p className="text-sm text-text-muted">
-                  You will be the first owner. You can add more owners and set the signature threshold after creation.
+                  You will be the first owner with a threshold of 1. You can add more owners and increase the threshold from the Owners page after creation.
                 </p>
               </div>
+
+              {createError && (
+                <div className="p-4 rounded-xl bg-status-error/10 border border-status-error/30">
+                  <p className="text-sm text-status-error">{createError}</p>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="btn-secondary flex-1"
+                disabled={isCreating}
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreateWallet}
                 className="btn-primary flex-1"
+                disabled={isCreating}
               >
-                Create Wallet
+                {isCreating ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" opacity="0.25" />
+                      <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Creating...
+                  </span>
+                ) : (
+                  "Create Wallet"
+                )}
               </button>
             </div>
           </div>

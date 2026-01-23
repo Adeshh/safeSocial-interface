@@ -1,15 +1,29 @@
+"use client";
+
+import { useState } from "react";
+import { type Address, type Hex } from "viem";
+import { useAccount } from "wagmi";
+import { useSignTransaction, useExecuteTransaction, useCancelTransaction } from "../hooks";
+import { useSafeWallet } from "../context/SafeWalletContext";
+
 interface TransactionCardProps {
   id: string;
-  type: "transfer" | "contract" | "settings";
-  description: string;
+  type: "transfer" | "contract" | "settings" | "TRANSFER" | "CONTRACT_CALL" | "ADD_OWNER" | "REMOVE_OWNER" | "CHANGE_THRESHOLD" | "CUSTOM";
+  description: string | null;
   value?: string;
   to?: string;
-  status: "pending" | "executed" | "rejected";
+  data?: Hex;
+  nonce?: string;
+  status: "pending" | "executed" | "rejected" | "PENDING" | "READY" | "EXECUTED" | "FAILED" | "CANCELLED";
+  safeTxHash?: Hex;
+  paymasterAndData?: Hex | null;
   signatures: {
     current: number;
     required: number;
+    signers?: string[];
   };
   timestamp: string;
+  onUpdate?: () => void;
 }
 
 export function TransactionCard({
@@ -18,24 +32,54 @@ export function TransactionCard({
   description,
   value,
   to,
+  data,
+  nonce,
   status,
+  safeTxHash,
+  paymasterAndData,
   signatures,
   timestamp,
+  onUpdate,
 }: TransactionCardProps) {
+  const { address } = useAccount();
+  const { selectedWallet } = useSafeWallet();
+  const { signTransaction, isSigning, error: signError } = useSignTransaction();
+  const { executeTransaction, isExecuting, error: execError } = useExecuteTransaction(
+    selectedWallet?.address as Address | undefined
+  );
+  const { cancelTransaction, isCancelling, error: cancelError } = useCancelTransaction();
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  // Normalize status
+  const normalizedStatus = status.toLowerCase() as "pending" | "ready" | "executed" | "failed" | "cancelled";
+  const isPending = normalizedStatus === "pending" || normalizedStatus === "ready";
+  const isReady = normalizedStatus === "ready" || signatures.current >= signatures.required;
+
+  // Check if current user has already signed
+  const hasUserSigned = signatures.signers?.some(
+    (signer) => signer.toLowerCase() === address?.toLowerCase()
+  );
+
   const statusConfig = {
-    pending: {
-      badge: "badge-pending",
-      label: "Pending",
-    },
-    executed: {
-      badge: "badge-success",
-      label: "Executed",
-    },
-    rejected: {
-      badge: "badge-error",
-      label: "Rejected",
-    },
+    pending: { badge: "badge-pending", label: "Pending" },
+    ready: { badge: "badge-info", label: "Ready" },
+    executed: { badge: "badge-success", label: "Executed" },
+    failed: { badge: "badge-error", label: "Failed" },
+    cancelled: { badge: "badge-error", label: "Cancelled" },
   };
+
+  // Normalize type
+  const normalizedType = type.toLowerCase().replace("_", "") as "transfer" | "contract" | "settings";
+  const typeMapping: Record<string, "transfer" | "contract" | "settings"> = {
+    transfer: "transfer",
+    contractcall: "contract",
+    addowner: "settings",
+    removeowner: "settings",
+    changethreshold: "settings",
+    custom: "contract",
+  };
+  const mappedType = typeMapping[normalizedType] || "transfer";
 
   const typeIcons = {
     transfer: (
@@ -59,33 +103,126 @@ export function TransactionCard({
     ),
   };
 
+  const handleSign = async () => {
+    if (!safeTxHash) {
+      setLocalError("Transaction hash not available");
+      return;
+    }
+
+    setLocalError(null);
+    const success = await signTransaction(id, safeTxHash);
+    if (success && onUpdate) {
+      onUpdate();
+    }
+  };
+
+  const handleExecute = async () => {
+    if (!to || !nonce) {
+      setLocalError("Transaction details not available");
+      return;
+    }
+
+    setLocalError(null);
+    const txHash = await executeTransaction(id, {
+      to: to as Address,
+      value: value || "0",
+      data: data || "0x",
+      nonce,
+      paymasterAndData: paymasterAndData || undefined,
+    });
+
+    if (txHash && onUpdate) {
+      onUpdate();
+    }
+  };
+
+  const handleCancel = async () => {
+    setLocalError(null);
+    const success = await cancelTransaction(id);
+    if (success && onUpdate) {
+      setShowCancelConfirm(false);
+      onUpdate();
+    }
+  };
+
+  // Check if using paymaster
+  const usesPaymaster = paymasterAndData && paymasterAndData !== "0x";
+
+  const formatValue = (val: string) => {
+    // If value is in wei, convert to ETH
+    if (val.length > 10) {
+      const eth = Number(val) / 1e18;
+      return `${eth.toFixed(4)} ETH`;
+    }
+    return val;
+  };
+
   return (
     <div className="card p-5 hover:border-border-accent animate-fade-in">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-4">
           <div className="p-3 rounded-xl bg-bg-tertiary">
-            {typeIcons[type]}
+            {typeIcons[mappedType]}
           </div>
           <div>
-            <h3 className="font-medium text-text-primary mb-1">{description}</h3>
+            <h3 className="font-medium text-text-primary mb-1">
+              {description || "Transaction"}
+            </h3>
             {to && (
               <p className="text-sm text-text-muted">
-                To: <span className="address">{to}</span>
+                To: <span className="address">{to.slice(0, 10)}...{to.slice(-8)}</span>
               </p>
             )}
           </div>
         </div>
-        <span className={`badge ${statusConfig[status].badge}`}>
-          {statusConfig[status].label}
-        </span>
+        <div className="flex items-center gap-2">
+          {usesPaymaster && (
+            <span className="badge bg-accent-secondary/20 text-accent-secondary border-accent-secondary/30">
+              DAI Gas
+            </span>
+          )}
+          <span className={`badge ${statusConfig[normalizedStatus]?.badge || "badge-pending"}`}>
+            {statusConfig[normalizedStatus]?.label || status}
+          </span>
+        </div>
       </div>
+
+      {/* Error display */}
+      {(localError || signError || execError || cancelError) && (
+        <div className="mb-4 p-3 rounded-lg bg-status-error/10 border border-status-error/30">
+          <p className="text-sm text-status-error">{localError || signError || execError || cancelError}</p>
+        </div>
+      )}
+
+      {/* Cancel Confirmation */}
+      {showCancelConfirm && (
+        <div className="mb-4 p-4 rounded-lg bg-status-pending/10 border border-status-pending/30">
+          <p className="text-sm text-text-primary mb-3">Are you sure you want to cancel this transaction?</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCancelConfirm(false)}
+              className="btn-secondary text-xs py-2 px-3"
+              disabled={isCancelling}
+            >
+              No, keep it
+            </button>
+            <button
+              onClick={handleCancel}
+              disabled={isCancelling}
+              className="text-xs py-2 px-3 rounded-lg bg-status-error/20 text-status-error hover:bg-status-error/30 transition-colors disabled:opacity-50"
+            >
+              {isCancelling ? "Cancelling..." : "Yes, cancel"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between pt-4 border-t border-border-subtle">
         <div className="flex items-center gap-6">
-          {value && (
+          {value && value !== "0" && (
             <div>
               <p className="text-xs text-text-muted mb-1">Value</p>
-              <p className="font-semibold text-text-primary">{value}</p>
+              <p className="font-semibold text-text-primary">{formatValue(value)}</p>
             </div>
           )}
           <div>
@@ -98,7 +235,7 @@ export function TransactionCard({
                     className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-primary to-accent-secondary border-2 border-bg-secondary"
                   />
                 ))}
-                {Array.from({ length: signatures.required - signatures.current }).map((_, i) => (
+                {Array.from({ length: Math.max(0, signatures.required - signatures.current) }).map((_, i) => (
                   <div
                     key={i}
                     className="w-6 h-6 rounded-full bg-bg-tertiary border-2 border-bg-secondary border-dashed"
@@ -114,15 +251,44 @@ export function TransactionCard({
 
         <div className="flex items-center gap-3">
           <span className="text-xs text-text-muted">{timestamp}</span>
-          {status === "pending" && (
-            <>
-              <button className="btn-primary text-xs py-2 px-4">
-                Sign
-              </button>
-              <button className="btn-ghost text-xs text-status-error hover:bg-status-error/10">
-                Reject
-              </button>
-            </>
+          
+          {isPending && !hasUserSigned && (
+            <button 
+              onClick={handleSign}
+              disabled={isSigning}
+              className="btn-primary text-xs py-2 px-4 disabled:opacity-50"
+            >
+              {isSigning ? "Signing..." : "Sign"}
+            </button>
+          )}
+          
+          {isPending && hasUserSigned && !isReady && (
+            <span className="text-xs text-status-success">✓ Signed</span>
+          )}
+          
+          {isReady && isPending && (
+            <button 
+              onClick={handleExecute}
+              disabled={isExecuting}
+              className="btn-primary text-xs py-2 px-4 disabled:opacity-50"
+            >
+              {isExecuting ? "Executing..." : "Execute"}
+            </button>
+          )}
+
+          {/* Cancel button for pending transactions */}
+          {isPending && !showCancelConfirm && (
+            <button
+              onClick={() => setShowCancelConfirm(true)}
+              disabled={isCancelling}
+              className="text-xs py-2 px-3 rounded-lg bg-bg-tertiary text-text-muted hover:text-status-error hover:bg-status-error/10 transition-colors disabled:opacity-50"
+              title="Cancel transaction"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </button>
           )}
         </div>
       </div>

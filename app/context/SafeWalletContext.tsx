@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { isAddress, getAddress } from "viem";
 
 export interface SafeWallet {
   address: string;
@@ -17,12 +18,13 @@ interface SafeWalletContextType {
   wallets: SafeWallet[];
   setWallets: (wallets: SafeWallet[]) => void;
   isLoading: boolean;
+  clearSelectedWallet: () => void;
 }
 
 const SafeWalletContext = createContext<SafeWalletContextType | undefined>(undefined);
 
 export function SafeWalletProvider({ children }: { children: ReactNode }) {
-  const [selectedWallet, setSelectedWallet] = useState<SafeWallet | null>(null);
+  const [selectedWallet, setSelectedWalletState] = useState<SafeWallet | null>(null);
   const [wallets, setWallets] = useState<SafeWallet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -31,13 +33,35 @@ export function SafeWalletProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem("selectedSafeWallet");
     if (saved) {
       try {
-        setSelectedWallet(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        // Validate the address before using it
+        if (parsed.address && isAddress(parsed.address)) {
+          // Ensure proper checksum
+          parsed.address = getAddress(parsed.address);
+          setSelectedWalletState(parsed);
+        } else {
+          // Invalid address, clear it
+          localStorage.removeItem("selectedSafeWallet");
+        }
       } catch {
         localStorage.removeItem("selectedSafeWallet");
       }
     }
     setIsLoading(false);
   }, []);
+
+  // Wrapper to validate and set wallet
+  const setSelectedWallet = (wallet: SafeWallet | null) => {
+    if (wallet && wallet.address) {
+      // Validate and checksum the address
+      if (!isAddress(wallet.address)) {
+        console.error("Invalid wallet address:", wallet.address);
+        return;
+      }
+      wallet.address = getAddress(wallet.address);
+    }
+    setSelectedWalletState(wallet);
+  };
 
   // Save selected wallet to localStorage
   useEffect(() => {
@@ -48,6 +72,12 @@ export function SafeWalletProvider({ children }: { children: ReactNode }) {
     }
   }, [selectedWallet]);
 
+  // Clear selected wallet
+  const clearSelectedWallet = () => {
+    setSelectedWalletState(null);
+    localStorage.removeItem("selectedSafeWallet");
+  };
+
   return (
     <SafeWalletContext.Provider
       value={{
@@ -56,6 +86,7 @@ export function SafeWalletProvider({ children }: { children: ReactNode }) {
         wallets,
         setWallets,
         isLoading,
+        clearSelectedWallet,
       }}
     >
       {children}

@@ -1,41 +1,41 @@
 "use client";
 
+import { useEffect } from "react";
+import { type Address, formatEther } from "viem";
 import { Sidebar, Header, StatCard, TransactionCard } from "./components";
 import { AppContent } from "./components/AppContent";
 import { useSafeWallet } from "./context/SafeWalletContext";
-
-// Mock data for UI demonstration
-const mockPendingTransactions = [
-  {
-    id: "tx-001",
-    type: "transfer" as const,
-    description: "Transfer to Development Fund",
-    value: "0.5 ETH",
-    to: "0xAbC1...Ef23",
-    status: "pending" as const,
-    signatures: { current: 1, required: 2 },
-    timestamp: "2 hours ago",
-  },
-  {
-    id: "tx-002",
-    type: "contract" as const,
-    description: "Approve USDC Spending",
-    to: "0x7F9c...8b12",
-    status: "pending" as const,
-    signatures: { current: 1, required: 2 },
-    timestamp: "5 hours ago",
-  },
-];
+import { useWalletDetails, useTransactions } from "./hooks";
 
 function DashboardContent() {
-  const { selectedWallet } = useSafeWallet();
+  const { selectedWallet, setSelectedWallet } = useSafeWallet();
+  const { details, isLoading: detailsLoading, refetch: refetchDetails } = useWalletDetails(
+    selectedWallet?.address as Address | undefined
+  );
+  const { transactions, isLoading: txLoading, refetch: refetchTransactions } = useTransactions(
+    selectedWallet?.address as Address | undefined
+  );
+
+  // Update selected wallet with on-chain data
+  useEffect(() => {
+    if (details && selectedWallet) {
+      setSelectedWallet({
+        ...selectedWallet,
+        threshold: details.threshold,
+        owners: details.owners.length,
+        balance: `${parseFloat(details.balance).toFixed(4)} ETH`,
+      });
+    }
+  }, [details]);
+
+  const pendingTransactions = transactions.filter(
+    (tx) => tx.status === "PENDING" || tx.status === "READY"
+  );
 
   const mockStats = [
     {
       title: "Total Balance",
-      value: selectedWallet?.balance || "0 ETH",
-      change: "+2.3%",
-      changeType: "positive" as const,
+      value: details?.balance ? `${parseFloat(details.balance).toFixed(4)} ETH` : "Loading...",
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-primary">
           <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
@@ -44,7 +44,7 @@ function DashboardContent() {
     },
     {
       title: "Pending Transactions",
-      value: "2",
+      value: pendingTransactions.length.toString(),
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-status-pending">
           <circle cx="12" cy="12" r="10" />
@@ -54,9 +54,7 @@ function DashboardContent() {
     },
     {
       title: "Total Transactions",
-      value: "24",
-      change: "+5 this week",
-      changeType: "neutral" as const,
+      value: transactions.length.toString(),
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-secondary">
           <path d="M17 3L21 7L17 11" />
@@ -68,7 +66,7 @@ function DashboardContent() {
     },
     {
       title: "Owners",
-      value: `${selectedWallet?.owners || 0}`,
+      value: details?.owners.length.toString() || "0",
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-status-info">
           <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -80,9 +78,9 @@ function DashboardContent() {
     },
   ];
 
-  const formatAddress = (addr: string) => {
-    if (addr.length <= 13) return addr;
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  const handleTransactionUpdate = () => {
+    refetchTransactions();
+    refetchDetails();
   };
 
   return (
@@ -123,7 +121,10 @@ function DashboardContent() {
                   Your SafeSocial multisig contract on Sepolia
                 </p>
               </div>
-              <button className="btn-secondary text-sm py-2">
+              <button 
+                onClick={() => navigator.clipboard.writeText(selectedWallet?.address || "")}
+                className="btn-secondary text-sm py-2"
+              >
                 <span className="flex items-center gap-2">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
@@ -147,10 +148,12 @@ function DashboardContent() {
                 </p>
                 <div className="flex items-center gap-4 mt-1">
                   <span className="text-sm text-text-muted">
-                    Threshold: {selectedWallet?.threshold} of {selectedWallet?.owners} signatures required
+                    Threshold: {details?.threshold || selectedWallet?.threshold || 0} of {details?.owners.length || selectedWallet?.owners || 0} signatures required
                   </span>
                   <span className="text-sm text-text-muted">•</span>
-                  <span className="text-sm text-text-muted">Created {selectedWallet?.createdAt}</span>
+                  <span className="text-sm text-text-muted">
+                    Nonce: {details?.nonce?.toString() || "0"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -167,27 +170,72 @@ function DashboardContent() {
                   Transactions awaiting signatures
                 </p>
               </div>
-              <button className="btn-primary text-sm">
+              <a href="/transactions" className="btn-primary text-sm">
                 <span className="flex items-center gap-2">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 5v14M5 12h14" />
                   </svg>
                   New Transaction
                 </span>
-              </button>
+              </a>
             </div>
-            <div className="space-y-4">
-              {mockPendingTransactions.map((tx, index) => (
-                <div key={tx.id} style={{ animationDelay: `${index * 100}ms` }}>
-                  <TransactionCard {...tx} />
+            
+            {txLoading ? (
+              <div className="space-y-4">
+                {[1, 2].map((i) => (
+                  <div key={i} className="card p-5">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl skeleton" />
+                      <div className="flex-1">
+                        <div className="h-5 w-48 skeleton mb-2" />
+                        <div className="h-4 w-32 skeleton" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : pendingTransactions.length > 0 ? (
+              <div className="space-y-4">
+                {pendingTransactions.slice(0, 5).map((tx, index) => (
+                  <div key={tx.id} style={{ animationDelay: `${index * 100}ms` }}>
+                    <TransactionCard
+                      id={tx.id}
+                      type={tx.type as any}
+                      description={tx.description}
+                      value={tx.value}
+                      to={tx.to}
+                      data={tx.data}
+                      nonce={tx.nonce}
+                      status={tx.status as any}
+                      safeTxHash={tx.safeTxHash}
+                      signatures={{
+                        current: tx.signatureCount,
+                        required: tx.threshold,
+                        signers: tx.signatures.map(s => s.signerAddress),
+                      }}
+                      timestamp={new Date(tx.createdAt).toLocaleDateString()}
+                      onUpdate={handleTransactionUpdate}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="card p-8 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-bg-tertiary flex items-center justify-center">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-muted">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
                 </div>
-              ))}
-            </div>
+                <h3 className="text-lg font-semibold text-text-primary mb-2">All caught up!</h3>
+                <p className="text-text-secondary">No pending transactions</p>
+              </div>
+            )}
           </div>
 
           {/* Quick Actions */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <button className="card p-6 text-left hover:border-accent-primary/50 transition-all group">
+            <a href="/transactions?new=true" className="card p-6 text-left hover:border-accent-primary/50 transition-all group">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-primary/20 to-accent-primary/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-primary">
                   <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
@@ -195,9 +243,9 @@ function DashboardContent() {
               </div>
               <h3 className="text-lg font-semibold text-text-primary mb-1">Send Tokens</h3>
               <p className="text-sm text-text-secondary">Transfer ETH or ERC-20 tokens</p>
-            </button>
+            </a>
 
-            <button className="card p-6 text-left hover:border-accent-secondary/50 transition-all group">
+            <a href="/transactions?new=true&type=contract" className="card p-6 text-left hover:border-accent-secondary/50 transition-all group">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-secondary/20 to-accent-secondary/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-secondary">
                   <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
@@ -208,9 +256,9 @@ function DashboardContent() {
               </div>
               <h3 className="text-lg font-semibold text-text-primary mb-1">Contract Interaction</h3>
               <p className="text-sm text-text-secondary">Execute smart contract calls</p>
-            </button>
+            </a>
 
-            <button className="card p-6 text-left hover:border-status-info/50 transition-all group">
+            <a href="/owners?add=true" className="card p-6 text-left hover:border-status-info/50 transition-all group">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-status-info/20 to-status-info/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-status-info">
                   <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -221,7 +269,7 @@ function DashboardContent() {
               </div>
               <h3 className="text-lg font-semibold text-text-primary mb-1">Add Owner</h3>
               <p className="text-sm text-text-secondary">Propose a new signer</p>
-            </button>
+            </a>
           </div>
         </main>
       </div>

@@ -1,11 +1,54 @@
 "use client";
 
+import { useState } from "react";
+import { type Address, formatEther, parseEther } from "viem";
+import { useWalletClient, usePublicClient } from "wagmi";
 import { Sidebar, Header } from "../components";
 import { AppContent } from "../components/AppContent";
 import { useSafeWallet } from "../context/SafeWalletContext";
+import { useEntryPointDeposit, useWalletDetails } from "../hooks";
+import { CONTRACTS } from "../config/contracts";
 
 function SettingsContent() {
-  const { selectedWallet } = useSafeWallet();
+  const { selectedWallet, clearSelectedWallet } = useSafeWallet();
+  const walletAddress = selectedWallet?.address as Address | undefined;
+  
+  const { details, refetch: refetchDetails } = useWalletDetails(walletAddress);
+  const { balance: depositBalance, refetch: refetchDeposit } = useEntryPointDeposit(walletAddress);
+  const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
+  
+  const [fundAmount, setFundAmount] = useState("0.05");
+  const [showFundModal, setShowFundModal] = useState(false);
+  const [isFunding, setIsFunding] = useState(false);
+
+  // Fund the SafeSocial wallet with ETH (for gas payments)
+  const handleFundWallet = async () => {
+    if (!walletAddress || !walletClient || !publicClient) return;
+    
+    setIsFunding(true);
+    try {
+      // Send ETH directly to the SafeSocial wallet
+      const hash = await walletClient.sendTransaction({
+        to: walletAddress,
+        value: parseEther(fundAmount),
+      });
+      
+      await publicClient.waitForTransactionReceipt({ hash });
+      
+      // Refresh balances
+      refetchDetails();
+      refetchDeposit();
+      setShowFundModal(false);
+      setFundAmount("0.05");
+    } catch (err) {
+      console.error("Failed to fund wallet:", err);
+    } finally {
+      setIsFunding(false);
+    }
+  };
+
+  const formattedDeposit = depositBalance ? formatEther(BigInt(depositBalance)) : "0";
 
   return (
     <div className="flex min-h-screen">
@@ -28,6 +71,64 @@ function SettingsContent() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Main Settings */}
             <div className="lg:col-span-2 space-y-6">
+              {/* Wallet Balance - CRITICAL for gas payments */}
+              <div className="card p-6 border-accent-primary/30">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-accent-primary/20 flex items-center justify-center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-accent-primary">
+                      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-text-primary">
+                      Wallet Balance
+                    </h2>
+                    <p className="text-sm text-text-secondary">
+                      ETH for gas payments (auto-prefunded to EntryPoint)
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="p-4 rounded-xl bg-bg-tertiary mb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-text-muted mb-1">Wallet ETH Balance</p>
+                      <p className="text-2xl font-bold text-text-primary">
+                        {details ? parseFloat(details.balance).toFixed(6) : "0.000000"} ETH
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowFundModal(true)}
+                      className="btn-primary"
+                    >
+                      Fund Wallet
+                    </button>
+                  </div>
+                </div>
+
+                {/* EntryPoint deposit info (informational) */}
+                <div className="p-3 rounded-lg bg-bg-tertiary mb-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-text-muted">EntryPoint Deposit</span>
+                    <span className="text-text-primary font-medium">
+                      {parseFloat(formattedDeposit).toFixed(6)} ETH
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-status-info/10 border border-status-info/30">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-status-info mt-0.5 shrink-0">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" />
+                    <path d="M12 8h.01" />
+                  </svg>
+                  <p className="text-sm text-status-info">
+                    Send ETH to your SafeSocial wallet. The wallet automatically pays gas from its balance 
+                    via the EntryPoint during transaction execution. No manual deposit required.
+                  </p>
+                </div>
+              </div>
+
               {/* Wallet Info */}
               <div className="card p-6">
                 <h2 className="text-lg font-semibold text-text-primary mb-6">
@@ -55,7 +156,10 @@ function SettingsContent() {
                         readOnly
                         className="input font-mono flex-1 bg-bg-elevated cursor-not-allowed"
                       />
-                      <button className="btn-secondary px-4">
+                      <button 
+                        onClick={() => navigator.clipboard.writeText(selectedWallet?.address || "")}
+                        className="btn-secondary px-4"
+                      >
                         <svg
                           width="18"
                           height="18"
@@ -87,52 +191,32 @@ function SettingsContent() {
                         Signature Threshold
                       </h3>
                       <p className="text-sm text-text-secondary">
-                        Current: {selectedWallet?.threshold} of {selectedWallet?.owners} owners must sign
+                        Current: {details?.threshold || selectedWallet?.threshold || 0} of {details?.owners.length || selectedWallet?.owners || 0} owners must sign
                       </p>
                     </div>
-                    <button className="btn-secondary text-sm">
-                      Change
-                    </button>
+                    <a href="/owners" className="btn-secondary text-sm">
+                      Manage
+                    </a>
                   </div>
 
                   <div className="flex items-center justify-between p-4 rounded-xl bg-bg-tertiary">
                     <div>
                       <h3 className="font-medium text-text-primary mb-1">
-                        Transaction Expiry
+                        EntryPoint Contract
                       </h3>
-                      <p className="text-sm text-text-secondary">
-                        Pending transactions expire after 7 days
+                      <p className="text-sm text-text-secondary font-mono">
+                        {CONTRACTS.ENTRY_POINT.slice(0, 10)}...{CONTRACTS.ENTRY_POINT.slice(-8)}
                       </p>
                     </div>
-                    <button className="btn-secondary text-sm">
-                      Configure
-                    </button>
+                    <a
+                      href={`https://sepolia.etherscan.io/address/${CONTRACTS.ENTRY_POINT}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-secondary text-sm"
+                    >
+                      View
+                    </a>
                   </div>
-                </div>
-              </div>
-
-              {/* Notification Settings */}
-              <div className="card p-6">
-                <h2 className="text-lg font-semibold text-text-primary mb-6">
-                  Notifications
-                </h2>
-                <div className="space-y-4">
-                  {[
-                    { label: "New transaction proposals", description: "Get notified when a new transaction is proposed" },
-                    { label: "Signature requests", description: "Receive alerts when your signature is needed" },
-                    { label: "Transaction executions", description: "Know when transactions are executed" },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-center justify-between py-3">
-                      <div>
-                        <h3 className="font-medium text-text-primary">{item.label}</h3>
-                        <p className="text-sm text-text-muted">{item.description}</p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" defaultChecked className="sr-only peer" />
-                        <div className="w-11 h-6 bg-bg-elevated rounded-full peer peer-checked:bg-accent-primary transition-colors peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" />
-                      </label>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>
@@ -165,19 +249,15 @@ function SettingsContent() {
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-text-muted">Version</span>
-                    <span className="text-text-primary font-medium">1.0.0</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-muted">Created</span>
-                    <span className="text-text-primary font-medium">{selectedWallet?.createdAt}</span>
+                    <span className="text-text-primary font-medium">ERC-4337 v0.7</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-text-muted">Owners</span>
-                    <span className="text-text-primary font-medium">{selectedWallet?.owners}</span>
+                    <span className="text-text-primary font-medium">{details?.owners.length || selectedWallet?.owners || 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-text-muted">Threshold</span>
-                    <span className="text-text-primary font-medium">{selectedWallet?.threshold}</span>
+                    <span className="text-text-primary font-medium">{details?.threshold || selectedWallet?.threshold || 0}</span>
                   </div>
                 </div>
               </div>
@@ -211,27 +291,6 @@ function SettingsContent() {
                     </svg>
                     <span className="text-text-secondary">View on Etherscan</span>
                   </a>
-                  <a
-                    href="#"
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-bg-tertiary transition-colors"
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-text-muted"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                      <path d="M12 17h.01" />
-                    </svg>
-                    <span className="text-text-secondary">Documentation</span>
-                  </a>
                 </div>
               </div>
 
@@ -245,8 +304,7 @@ function SettingsContent() {
                 </p>
                 <button
                   onClick={() => {
-                    // This will trigger the wallet selection view
-                    localStorage.removeItem("selectedSafeWallet");
+                    clearSelectedWallet();
                     window.location.reload();
                   }}
                   className="w-full btn-secondary"
@@ -258,6 +316,102 @@ function SettingsContent() {
           </div>
         </main>
       </div>
+
+      {/* Fund Wallet Modal */}
+      {showFundModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowFundModal(false)}
+          />
+          <div className="relative w-full max-w-md mx-4 card p-6 animate-fade-in">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-text-primary">
+                Fund SafeSocial Wallet
+              </h2>
+              <button onClick={() => setShowFundModal(false)} className="btn-ghost p-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Amount (ETH)
+                </label>
+                <input
+                  type="text"
+                  value={fundAmount}
+                  onChange={(e) => setFundAmount(e.target.value)}
+                  placeholder="0.05"
+                  className="input"
+                />
+              </div>
+              
+              <div className="flex gap-2">
+                {["0.01", "0.05", "0.1"].map((amount) => (
+                  <button
+                    key={amount}
+                    onClick={() => setFundAmount(amount)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                      fundAmount === amount
+                        ? "bg-accent-primary/20 text-accent-primary border border-accent-primary/30"
+                        : "bg-bg-tertiary text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    {amount} ETH
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-bg-tertiary mb-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-text-muted">Current Balance</span>
+                <span className="text-text-primary">{details ? parseFloat(details.balance).toFixed(6) : "0"} ETH</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-text-muted">After Funding</span>
+                <span className="text-accent-primary font-medium">
+                  {(parseFloat(details?.balance || "0") + parseFloat(fundAmount || "0")).toFixed(6)} ETH
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-bg-tertiary mb-6">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-muted mt-0.5 shrink-0">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4" />
+                <path d="M12 8h.01" />
+              </svg>
+              <p className="text-xs text-text-muted">
+                ETH will be sent from your connected wallet to the SafeSocial wallet. 
+                The wallet uses this balance to automatically pay for gas during transactions.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowFundModal(false)}
+                className="btn-secondary flex-1"
+                disabled={isFunding}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFundWallet}
+                className="btn-primary flex-1"
+                disabled={isFunding || !fundAmount}
+              >
+                {isFunding ? "Sending..." : "Send ETH"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,0 +1,153 @@
+// Prisma schema for SafeSocial Multisig Wallet (ERC-4337)
+// Run: npx prisma generate && npx prisma db push
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// WALLET - Cached SafeSocial wallets from events
+// ============================================
+model Wallet {
+  id              String   @id @default(cuid())
+  address         String   @unique // On-chain wallet address
+  name            String?  // User-friendly name (off-chain)
+  threshold       Int      // Required signatures
+  chainId         Int      @default(11155111) // Sepolia
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Blockchain metadata
+  creationTxHash  String?  // Transaction that created the wallet
+  blockNumber     BigInt?  // Block where wallet was created
+  
+  // Relations
+  owners          WalletOwner[]
+  transactions    Transaction[]
+  
+  @@index([chainId])
+}
+
+// ============================================
+// WALLET OWNER - Owners of each wallet
+// ============================================
+model WalletOwner {
+  id          String   @id @default(cuid())
+  walletId    String
+  address     String   // Owner's EOA address
+  name        String?  // Optional display name
+  addedAt     DateTime @default(now())
+  removedAt   DateTime? // Null if still active
+  isActive    Boolean  @default(true)
+  
+  // Relations
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  signatures  Signature[]
+  
+  @@unique([walletId, address])
+  @@index([address])
+}
+
+// ============================================
+// TRANSACTION - Proposed transactions (ERC-4337 UserOps)
+// ============================================
+model Transaction {
+  id              String   @id @default(cuid())
+  walletId        String
+  
+  // Original transaction details
+  nonce           BigInt   // EntryPoint nonce for this UserOp
+  to              String   // Target address for execute()
+  value           String   // Amount in wei (stored as string for BigInt)
+  data            String   // Original calldata for target (hex string)
+  
+  // ERC-4337 UserOp data
+  callData        String?  // Encoded execute() callData for UserOp
+  paymasterAndData String? // Paymaster data for gas sponsorship (hex string)
+  
+  // Hash for signing (userOpHash)
+  safeTxHash      String   @unique // userOpHash that owners sign
+  
+  // Status tracking
+  status          TransactionStatus @default(PENDING)
+  description     String?  // Human-readable description
+  type            TransactionType @default(TRANSFER)
+  
+  // Execution details (filled after execution)
+  executionTxHash String?  // On-chain tx hash when executed
+  executedAt      DateTime?
+  executedBy      String?  // Address that submitted final tx
+  
+  // Metadata
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdBy       String   // Address that proposed the tx
+  expiresAt       DateTime? // Optional expiration
+  
+  // Relations
+  wallet          Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  signatures      Signature[]
+  
+  @@index([walletId, status])
+  @@index([safeTxHash])
+}
+
+enum TransactionStatus {
+  PENDING     // Awaiting signatures
+  READY       // Has enough signatures, ready to execute
+  EXECUTED    // Successfully executed on-chain
+  FAILED      // Execution failed
+  CANCELLED   // Cancelled/rejected
+  EXPIRED     // Past expiration date
+}
+
+enum TransactionType {
+  TRANSFER        // ETH/token transfer
+  CONTRACT_CALL   // Smart contract interaction
+  ADD_OWNER       // Add new owner
+  REMOVE_OWNER    // Remove owner
+  CHANGE_THRESHOLD // Change signature threshold
+  CUSTOM          // Other
+}
+
+// ============================================
+// SIGNATURE - Individual owner signatures
+// ============================================
+model Signature {
+  id              String   @id @default(cuid())
+  transactionId   String
+  ownerId         String
+  
+  // Signature data (65 bytes: r + s + v)
+  signature       String   // The actual signature (hex string)
+  signerAddress   String   // Address that signed
+  
+  // Signature metadata
+  signedAt        DateTime @default(now())
+  
+  // Relations
+  transaction     Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  owner           WalletOwner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  
+  @@unique([transactionId, signerAddress]) // One signature per signer per tx
+  @@index([transactionId])
+}
+
+// ============================================
+// EVENT SYNC - Track blockchain sync progress
+// ============================================
+model EventSync {
+  id              String   @id @default(cuid())
+  chainId         Int
+  contractAddress String
+  eventName       String
+  lastBlockNumber BigInt
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([chainId, contractAddress, eventName])
+}
