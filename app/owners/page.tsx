@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { Sidebar, Header, OwnerCard } from "../components";
+import { AppContent } from "../components/AppContent";
+import { useSafeWallet } from "../context/SafeWalletContext";
 
 // Mock data
 const mockOwners = [
@@ -13,28 +15,14 @@ const mockOwners = [
   },
   {
     address: "0xAbC123456789dEf0123456789AbCdEf012345678",
-    name: "Alice Johnson",
+    name: "Alice",
     addedAt: "Jan 15, 2026",
-  },
-  {
-    address: "0x9D23456789AbCdEf0123456789AbCdEf01234567",
-    name: "Bob Smith",
-    addedAt: "Jan 18, 2026",
-  },
-  {
-    address: "0x3F45678901234567890AbCdEf0123456789AbCdEf",
-    name: undefined,
-    addedAt: "Jan 20, 2026",
-  },
-  {
-    address: "0x7A25678901234567890AbCdEf0123456789AbCdEf",
-    name: "Charlie Dev",
-    addedAt: "Jan 21, 2026",
   },
 ];
 
-export default function OwnersPage() {
+function OwnersContent() {
   const [showAddModal, setShowAddModal] = useState(false);
+  const { selectedWallet } = useSafeWallet();
 
   return (
     <div className="flex min-h-screen">
@@ -111,13 +99,13 @@ export default function OwnersPage() {
               <div className="flex items-center gap-8">
                 <div className="text-center">
                   <p className="text-4xl font-bold bg-gradient-to-r from-accent-primary to-accent-secondary bg-clip-text text-transparent">
-                    3
+                    {selectedWallet?.threshold || 0}
                   </p>
                   <p className="text-sm text-text-muted">Required</p>
                 </div>
                 <div className="text-2xl text-text-muted">/</div>
                 <div className="text-center">
-                  <p className="text-4xl font-bold text-text-primary">5</p>
+                  <p className="text-4xl font-bold text-text-primary">{selectedWallet?.owners || 0}</p>
                   <p className="text-sm text-text-muted">Total Owners</p>
                 </div>
                 <button className="btn-secondary ml-4">
@@ -287,7 +275,7 @@ export default function OwnersPage() {
                   <path d="M12 16v-4" />
                   <path d="M12 8h.01" />
                 </svg>
-                This action requires 3 of 5 owner signatures
+                This action requires {selectedWallet?.threshold} of {selectedWallet?.owners} owner signatures
               </div>
             </div>
 
@@ -304,5 +292,13 @@ export default function OwnersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OwnersPage() {
+  return (
+    <AppContent>
+      <OwnersContent />
+    </AppContent>
   );
 }

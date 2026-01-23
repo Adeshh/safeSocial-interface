@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccount } from "wagmi";
+import { useSafeWallet } from "../context/SafeWalletContext";
 
 const navItems = [
   {
@@ -56,8 +57,8 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const { address, isConnected } = useAccount();
+  const { selectedWallet, setSelectedWallet } = useSafeWallet();
 
-  // Format address for display
   const formatAddress = (addr: string) => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
@@ -80,6 +81,46 @@ export function Sidebar() {
           </div>
         </Link>
       </div>
+
+      {/* Selected Wallet Info */}
+      {selectedWallet && (
+        <div className="px-4 py-3 border-b border-border-subtle">
+          <button
+            onClick={() => setSelectedWallet(null)}
+            className="w-full p-3 rounded-xl bg-bg-tertiary hover:bg-bg-elevated transition-colors text-left group"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-medium text-text-primary truncate">
+                {selectedWallet.name}
+              </p>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-text-muted group-hover:text-accent-primary transition-colors"
+              >
+                <path d="M17 3L21 7L17 11" />
+                <path d="M21 7H9" />
+              </svg>
+            </div>
+            <p className="text-xs font-mono text-text-muted">
+              {formatAddress(selectedWallet.address)}
+            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs text-text-muted">
+                {selectedWallet.threshold}/{selectedWallet.owners} signers
+              </span>
+              <span className="text-xs text-text-muted">•</span>
+              <span className="text-xs text-accent-primary font-medium">
+                {selectedWallet.balance}
+              </span>
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 p-4">
@@ -105,7 +146,7 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      {/* Wallet Status */}
+      {/* Connected Wallet Status */}
       <div className="p-4 border-t border-border-subtle">
         <div className="card-elevated p-4">
           {isConnected && address ? (
@@ -113,6 +154,7 @@ export function Sidebar() {
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
                 <span className="text-xs font-medium text-status-success">Connected</span>
+                <span className="ml-auto text-xs text-status-pending">Sepolia</span>
               </div>
               <p className="text-sm text-text-secondary mb-1">Your Wallet</p>
               <p className="address text-xs truncate">{formatAddress(address)}</p>

@@ -1,8 +1,12 @@
 "use client";
 
 import { Sidebar, Header } from "../components";
+import { AppContent } from "../components/AppContent";
+import { useSafeWallet } from "../context/SafeWalletContext";
 
-export default function SettingsPage() {
+function SettingsContent() {
+  const { selectedWallet } = useSafeWallet();
+
   return (
     <div className="flex min-h-screen">
       <Sidebar />
@@ -36,7 +40,7 @@ export default function SettingsPage() {
                     </label>
                     <input
                       type="text"
-                      defaultValue="SafeSocial Treasury"
+                      defaultValue={selectedWallet?.name || "SafeSocial Wallet"}
                       className="input"
                     />
                   </div>
@@ -47,7 +51,7 @@ export default function SettingsPage() {
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        value="0x742d35Cc6634C0532925a3b844Bc9e7595f8bE2a"
+                        value={selectedWallet?.address || "0x..."}
                         readOnly
                         className="input font-mono flex-1 bg-bg-elevated cursor-not-allowed"
                       />
@@ -83,7 +87,7 @@ export default function SettingsPage() {
                         Signature Threshold
                       </h3>
                       <p className="text-sm text-text-secondary">
-                        Current: 3 of 5 owners must sign
+                        Current: {selectedWallet?.threshold} of {selectedWallet?.owners} owners must sign
                       </p>
                     </div>
                     <button className="btn-secondary text-sm">
@@ -104,20 +108,6 @@ export default function SettingsPage() {
                       Configure
                     </button>
                   </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-bg-tertiary">
-                    <div>
-                      <h3 className="font-medium text-text-primary mb-1">
-                        Daily Transfer Limit
-                      </h3>
-                      <p className="text-sm text-text-secondary">
-                        No limit configured
-                      </p>
-                    </div>
-                    <button className="btn-secondary text-sm">
-                      Set Limit
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -131,7 +121,6 @@ export default function SettingsPage() {
                     { label: "New transaction proposals", description: "Get notified when a new transaction is proposed" },
                     { label: "Signature requests", description: "Receive alerts when your signature is needed" },
                     { label: "Transaction executions", description: "Know when transactions are executed" },
-                    { label: "Owner changes", description: "Be alerted about owner additions/removals" },
                   ].map((item) => (
                     <div key={item.label} className="flex items-center justify-between py-3">
                       <div>
@@ -156,14 +145,14 @@ export default function SettingsPage() {
                   Network
                 </h2>
                 <div className="flex items-center gap-3 p-4 rounded-xl bg-bg-tertiary">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-white">
+                  <div className="w-10 h-10 rounded-full bg-status-pending/20 flex items-center justify-center">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-status-pending">
                       <path d="M11.944 17.97L4.58 13.62 11.943 24l7.37-10.38-7.372 4.35h.003zM12.056 0L4.69 12.223l7.365 4.354 7.365-4.35L12.056 0z" />
                     </svg>
                   </div>
                   <div>
-                    <p className="font-medium text-text-primary">Ethereum Mainnet</p>
-                    <p className="text-sm text-text-muted">Chain ID: 1</p>
+                    <p className="font-medium text-text-primary">Sepolia Testnet</p>
+                    <p className="text-sm text-text-muted">Chain ID: 11155111</p>
                   </div>
                 </div>
               </div>
@@ -176,19 +165,19 @@ export default function SettingsPage() {
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-text-muted">Version</span>
-                    <span className="text-text-primary font-medium">1.3.0</span>
+                    <span className="text-text-primary font-medium">1.0.0</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-text-muted">Created</span>
-                    <span className="text-text-primary font-medium">Jan 15, 2026</span>
+                    <span className="text-text-primary font-medium">{selectedWallet?.createdAt}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-text-muted">Total Txs</span>
-                    <span className="text-text-primary font-medium">1,284</span>
+                    <span className="text-text-muted">Owners</span>
+                    <span className="text-text-primary font-medium">{selectedWallet?.owners}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-text-muted">Nonce</span>
-                    <span className="text-text-primary font-medium">156</span>
+                    <span className="text-text-muted">Threshold</span>
+                    <span className="text-text-primary font-medium">{selectedWallet?.threshold}</span>
                   </div>
                 </div>
               </div>
@@ -200,7 +189,9 @@ export default function SettingsPage() {
                 </h2>
                 <div className="space-y-2">
                   <a
-                    href="#"
+                    href={`https://sepolia.etherscan.io/address/${selectedWallet?.address}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="flex items-center gap-3 p-3 rounded-xl hover:bg-bg-tertiary transition-colors"
                   >
                     <svg
@@ -235,26 +226,6 @@ export default function SettingsPage() {
                       strokeLinejoin="round"
                       className="text-text-muted"
                     >
-                      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-                      <polyline points="14,2 14,8 20,8" />
-                    </svg>
-                    <span className="text-text-secondary">Contract ABI</span>
-                  </a>
-                  <a
-                    href="#"
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-bg-tertiary transition-colors"
-                  >
-                    <svg
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="text-text-muted"
-                    >
                       <circle cx="12" cy="12" r="10" />
                       <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
                       <path d="M12 17h.01" />
@@ -264,16 +235,23 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Danger Zone */}
-              <div className="card p-6 border-status-error/20">
-                <h2 className="text-lg font-semibold text-status-error mb-4">
-                  Danger Zone
+              {/* Switch Wallet */}
+              <div className="card p-6 border-accent-primary/20">
+                <h2 className="text-lg font-semibold text-text-primary mb-4">
+                  Switch Wallet
                 </h2>
                 <p className="text-sm text-text-muted mb-4">
-                  These actions are irreversible and require full owner consensus.
+                  Select a different SafeSocial wallet to manage.
                 </p>
-                <button className="w-full py-3 px-4 rounded-xl border border-status-error/30 text-status-error font-medium hover:bg-status-error/10 transition-colors">
-                  Replace All Owners
+                <button
+                  onClick={() => {
+                    // This will trigger the wallet selection view
+                    localStorage.removeItem("selectedSafeWallet");
+                    window.location.reload();
+                  }}
+                  className="w-full btn-secondary"
+                >
+                  Change Wallet
                 </button>
               </div>
             </div>
@@ -281,5 +259,13 @@ export default function SettingsPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <AppContent>
+      <SettingsContent />
+    </AppContent>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Sidebar, Header, TransactionCard } from "../components";
+import { AppContent } from "../components/AppContent";
 
 // Mock data
 const mockTransactions = {
@@ -10,10 +11,10 @@ const mockTransactions = {
       id: "tx-001",
       type: "transfer" as const,
       description: "Transfer to Development Fund",
-      value: "15.0 ETH",
+      value: "0.5 ETH",
       to: "0xAbC1...Ef23",
       status: "pending" as const,
-      signatures: { current: 2, required: 3 },
+      signatures: { current: 1, required: 2 },
       timestamp: "2 hours ago",
     },
     {
@@ -22,73 +23,35 @@ const mockTransactions = {
       description: "Approve USDC Spending",
       to: "0x7F9c...8b12",
       status: "pending" as const,
-      signatures: { current: 1, required: 3 },
+      signatures: { current: 1, required: 2 },
       timestamp: "5 hours ago",
-    },
-    {
-      id: "tx-003",
-      type: "settings" as const,
-      description: "Add New Owner",
-      status: "pending" as const,
-      signatures: { current: 3, required: 3 },
-      timestamp: "1 day ago",
     },
   ],
   history: [
     {
       id: "tx-004",
       type: "transfer" as const,
-      description: "Monthly Payroll Distribution",
-      value: "45.0 ETH",
+      description: "Initial Funding",
+      value: "1.0 ETH",
       to: "0x9D23...1234",
       status: "executed" as const,
-      signatures: { current: 3, required: 3 },
+      signatures: { current: 2, required: 2 },
       timestamp: "3 days ago",
     },
     {
       id: "tx-005",
-      type: "contract" as const,
-      description: "Uniswap LP Deposit",
-      value: "100.0 ETH",
-      to: "0x7a25...ef78",
-      status: "executed" as const,
-      signatures: { current: 3, required: 3 },
-      timestamp: "1 week ago",
-    },
-    {
-      id: "tx-006",
-      type: "transfer" as const,
-      description: "Marketing Budget",
-      value: "5.0 ETH",
-      to: "0x3f45...ab12",
-      status: "rejected" as const,
-      signatures: { current: 1, required: 3 },
-      timestamp: "2 weeks ago",
-    },
-    {
-      id: "tx-007",
       type: "settings" as const,
-      description: "Update Threshold to 3/5",
+      description: "Add Owner",
       status: "executed" as const,
-      signatures: { current: 4, required: 4 },
-      timestamp: "1 month ago",
-    },
-    {
-      id: "tx-008",
-      type: "transfer" as const,
-      description: "Initial Treasury Allocation",
-      value: "500.0 ETH",
-      to: "0x1234...5678",
-      status: "executed" as const,
-      signatures: { current: 5, required: 5 },
-      timestamp: "2 months ago",
+      signatures: { current: 2, required: 2 },
+      timestamp: "1 week ago",
     },
   ],
 };
 
 type Tab = "pending" | "history" | "all";
 
-export default function TransactionsPage() {
+function TransactionsContent() {
   const [activeTab, setActiveTab] = useState<Tab>("pending");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -257,52 +220,16 @@ export default function TransactionsPage() {
               </div>
             )}
           </div>
-
-          {/* Pagination */}
-          {getTransactions().length > 0 && (
-            <div className="flex items-center justify-between mt-8 pt-6 border-t border-border-subtle">
-              <p className="text-sm text-text-muted">
-                Showing {getTransactions().length} transactions
-              </p>
-              <div className="flex items-center gap-2">
-                <button className="btn-ghost px-3 py-2" disabled>
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="m15 18-6-6 6-6" />
-                  </svg>
-                </button>
-                <button className="w-10 h-10 rounded-lg bg-accent-primary/10 text-accent-primary font-medium">
-                  1
-                </button>
-                <button className="btn-ghost w-10 h-10">2</button>
-                <button className="btn-ghost w-10 h-10">3</button>
-                <button className="btn-ghost px-3 py-2">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="m9 18 6-6-6-6" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
         </main>
       </div>
     </div>
+  );
+}
+
+export default function TransactionsPage() {
+  return (
+    <AppContent>
+      <TransactionsContent />
+    </AppContent>
   );
 }

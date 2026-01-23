@@ -1,65 +1,19 @@
+"use client";
+
 import { Sidebar, Header, StatCard, TransactionCard } from "./components";
+import { AppContent } from "./components/AppContent";
+import { useSafeWallet } from "./context/SafeWalletContext";
 
 // Mock data for UI demonstration
-const mockStats = [
-  {
-    title: "Total Balance",
-    value: "124.5 ETH",
-    change: "+12.3%",
-    changeType: "positive" as const,
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-primary">
-        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-      </svg>
-    ),
-  },
-  {
-    title: "Pending Transactions",
-    value: "3",
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-status-pending">
-        <circle cx="12" cy="12" r="10" />
-        <polyline points="12 6 12 12 16 14" />
-      </svg>
-    ),
-  },
-  {
-    title: "Total Transactions",
-    value: "1,284",
-    change: "+48 this month",
-    changeType: "neutral" as const,
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-secondary">
-        <path d="M17 3L21 7L17 11" />
-        <path d="M21 7H9" />
-        <path d="M7 21L3 17L7 13" />
-        <path d="M3 17H15" />
-      </svg>
-    ),
-  },
-  {
-    title: "Owners",
-    value: "5",
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-status-info">
-        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
-    ),
-  },
-];
-
 const mockPendingTransactions = [
   {
     id: "tx-001",
     type: "transfer" as const,
     description: "Transfer to Development Fund",
-    value: "15.0 ETH",
+    value: "0.5 ETH",
     to: "0xAbC1...Ef23",
     status: "pending" as const,
-    signatures: { current: 2, required: 3 },
+    signatures: { current: 1, required: 2 },
     timestamp: "2 hours ago",
   },
   {
@@ -68,20 +22,69 @@ const mockPendingTransactions = [
     description: "Approve USDC Spending",
     to: "0x7F9c...8b12",
     status: "pending" as const,
-    signatures: { current: 1, required: 3 },
+    signatures: { current: 1, required: 2 },
     timestamp: "5 hours ago",
-  },
-  {
-    id: "tx-003",
-    type: "settings" as const,
-    description: "Add New Owner",
-    status: "pending" as const,
-    signatures: { current: 3, required: 3 },
-    timestamp: "1 day ago",
   },
 ];
 
-export default function Dashboard() {
+function DashboardContent() {
+  const { selectedWallet } = useSafeWallet();
+
+  const mockStats = [
+    {
+      title: "Total Balance",
+      value: selectedWallet?.balance || "0 ETH",
+      change: "+2.3%",
+      changeType: "positive" as const,
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-primary">
+          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+        </svg>
+      ),
+    },
+    {
+      title: "Pending Transactions",
+      value: "2",
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-status-pending">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+      ),
+    },
+    {
+      title: "Total Transactions",
+      value: "24",
+      change: "+5 this week",
+      changeType: "neutral" as const,
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent-secondary">
+          <path d="M17 3L21 7L17 11" />
+          <path d="M21 7H9" />
+          <path d="M7 21L3 17L7 13" />
+          <path d="M3 17H15" />
+        </svg>
+      ),
+    },
+    {
+      title: "Owners",
+      value: `${selectedWallet?.owners || 0}`,
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-status-info">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      ),
+    },
+  ];
+
+  const formatAddress = (addr: string) => {
+    if (addr.length <= 13) return addr;
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+
   return (
     <div className="flex min-h-screen">
       <Sidebar />
@@ -96,7 +99,7 @@ export default function Dashboard() {
               Welcome back
             </h1>
             <p className="text-text-secondary">
-              Here&apos;s what&apos;s happening with your multisig wallet today.
+              Managing <span className="text-accent-primary font-medium">{selectedWallet?.name}</span> on Sepolia Testnet
             </p>
           </div>
 
@@ -117,7 +120,7 @@ export default function Dashboard() {
                   Wallet Address
                 </h2>
                 <p className="text-sm text-text-secondary">
-                  Your multisig smart contract
+                  Your SafeSocial multisig contract on Sepolia
                 </p>
               </div>
               <button className="btn-secondary text-sm py-2">
@@ -139,13 +142,15 @@ export default function Dashboard() {
                 </svg>
               </div>
               <div className="flex-1">
-                <p className="font-mono text-lg text-text-primary">
-                  0x742d35Cc6634C0532925a3b844Bc9e7595f8bE2a
+                <p className="font-mono text-lg text-text-primary break-all">
+                  {selectedWallet?.address || "0x..."}
                 </p>
                 <div className="flex items-center gap-4 mt-1">
-                  <span className="text-sm text-text-muted">Threshold: 3 of 5 signatures required</span>
+                  <span className="text-sm text-text-muted">
+                    Threshold: {selectedWallet?.threshold} of {selectedWallet?.owners} signatures required
+                  </span>
                   <span className="text-sm text-text-muted">•</span>
-                  <span className="text-sm text-text-muted">Created Jan 15, 2026</span>
+                  <span className="text-sm text-text-muted">Created {selectedWallet?.createdAt}</span>
                 </div>
               </div>
             </div>
@@ -221,5 +226,13 @@ export default function Dashboard() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <AppContent>
+      <DashboardContent />
+    </AppContent>
   );
 }
