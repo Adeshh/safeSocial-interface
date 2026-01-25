@@ -150,10 +150,6 @@ function DashboardContent() {
                   <span className="text-sm text-text-muted">
                     Threshold: {details?.threshold || selectedWallet?.threshold || 0} of {details?.owners.length || selectedWallet?.owners || 0} signatures required
                   </span>
-                  <span className="text-sm text-text-muted">•</span>
-                  <span className="text-sm text-text-muted">
-                    Nonce: {details?.nonce?.toString() || "0"}
-                  </span>
                 </div>
               </div>
             </div>
@@ -207,7 +203,7 @@ function DashboardContent() {
                       data={tx.data}
                       nonce={tx.nonce}
                       status={tx.status as any}
-                      safeTxHash={tx.safeTxHash}
+                      safeTxHash={tx.userOpHash}
                       signatures={{
                         current: tx.signatureCount,
                         required: tx.threshold,
