@@ -10,9 +10,9 @@ export function Header() {
         <div className="flex-1 max-w-md">
           <div className="relative">
             <svg
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-              width="18"
-              height="18"
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none"
+              width="16"
+              height="16"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -26,7 +26,7 @@ export function Header() {
             <input
               type="text"
               placeholder="Search transactions, addresses..."
-              className="input pl-10 py-2.5 text-sm bg-bg-tertiary/50"
+              className="input w-full pl-11 py-2.5 text-sm bg-bg-tertiary/50"
             />
           </div>
         </div>

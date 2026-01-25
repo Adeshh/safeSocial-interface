@@ -44,7 +44,7 @@ export interface TransactionData {
   createdAt: string;
   createdBy: Address;
   executedAt?: string;
-  executionTxHash?: string;
+  executionTxHash?: string; // Transaction hash on Etherscan
 }
 
 export function useTransactions(walletAddress: Address | undefined) {

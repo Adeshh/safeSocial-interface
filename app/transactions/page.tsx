@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { type Address, type Hex, isAddress, getAddress } from "viem";
+import { type Address, type Hex, isAddress, getAddress, encodeFunctionData } from "viem";
 import { Sidebar, Header, TransactionCard } from "../components";
 import { AppContent } from "../components/AppContent";
 import { useSafeWallet } from "../context/SafeWalletContext";
@@ -10,7 +10,7 @@ import { useTransactions, useProposeTransaction, useWalletDetails } from "../hoo
 type Tab = "pending" | "history" | "all";
 
 function TransactionsContent() {
-  const [activeTab, setActiveTab] = useState<Tab>("pending");
+  const [activeTab, setActiveTab] = useState<Tab>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showNewTxModal, setShowNewTxModal] = useState(false);
   
@@ -75,6 +75,7 @@ function TransactionsContent() {
       status: tx.status as "PENDING" | "READY" | "EXECUTED" | "FAILED" | "CANCELLED",
       safeTxHash: tx.userOpHash,
       paymasterAndData: tx.paymasterAndData,
+      executionTxHash: tx.executionTxHash,
       signatures: {
         current: tx.signatureCount,
         required: tx.threshold,
@@ -192,7 +193,7 @@ function TransactionsContent() {
                 placeholder="Search transactions..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="input pl-10 py-2.5 text-sm"
+                className="input w-full pl-11 py-2.5 text-sm"
               />
             </div>
           </div>
@@ -308,6 +309,13 @@ function NewTransactionModal({
   const [addressError, setAddressError] = useState<string | null>(null);
   const [usePaymaster, setUsePaymaster] = useState(false);
   
+  // Contract call specific state
+  const [abiInput, setAbiInput] = useState("");
+  const [parsedFunctions, setParsedFunctions] = useState<Array<{ name: string; inputs: Array<{ name: string; type: string }> }>>([]);
+  const [selectedFunction, setSelectedFunction] = useState<string>("");
+  const [functionParams, setFunctionParams] = useState<Record<string, string>>({});
+  const [abiError, setAbiError] = useState<string | null>(null);
+  
   const { proposeTransaction, isProposing, error } = useProposeTransaction(walletAddress);
 
   const validateAddress = (addr: string) => {
@@ -323,16 +331,113 @@ function NewTransactionModal({
     return true;
   };
 
+  // Parse ABI and extract functions
+  const parseAbi = (abiString: string) => {
+    setAbiError(null);
+    setParsedFunctions([]);
+    setSelectedFunction("");
+    setFunctionParams({});
+    
+    if (!abiString.trim()) return;
+    
+    try {
+      const parsed = JSON.parse(abiString);
+      const abi = Array.isArray(parsed) ? parsed : [parsed];
+      
+      // Extract writable functions (not view/pure)
+      const functions = abi
+        .filter((item: { type?: string; stateMutability?: string; name?: string }) => 
+          item.type === "function" && 
+          item.stateMutability !== "view" && 
+          item.stateMutability !== "pure"
+        )
+        .map((item: { name: string; inputs: Array<{ name: string; type: string }> }) => ({
+          name: item.name,
+          inputs: item.inputs || [],
+        }));
+      
+      if (functions.length === 0) {
+        setAbiError("No writable functions found in ABI");
+        return;
+      }
+      
+      setParsedFunctions(functions);
+    } catch {
+      setAbiError("Invalid ABI format. Please paste a valid JSON ABI.");
+    }
+  };
+
+  // Generate calldata from selected function and params
+  const generateCalldata = (): Hex | null => {
+    if (!selectedFunction || parsedFunctions.length === 0) return null;
+    
+    const func = parsedFunctions.find(f => f.name === selectedFunction);
+    if (!func) return null;
+    
+    try {
+      // Build the function signature
+      const inputTypes = func.inputs.map(i => i.type).join(",");
+      const signature = `function ${func.name}(${inputTypes})`;
+      
+      // Parse values based on types
+      const args = func.inputs.map(input => {
+        const value = functionParams[input.name] || "";
+        
+        // Handle different types
+        if (input.type.startsWith("uint") || input.type.startsWith("int")) {
+          return BigInt(value || "0");
+        }
+        if (input.type === "bool") {
+          return value.toLowerCase() === "true";
+        }
+        if (input.type === "address") {
+          return value as Address;
+        }
+        if (input.type.endsWith("[]")) {
+          try {
+            return JSON.parse(value || "[]");
+          } catch {
+            return [];
+          }
+        }
+        return value;
+      });
+      
+      const callData = encodeFunctionData({
+        abi: [{ type: "function", name: func.name, inputs: func.inputs, outputs: [], stateMutability: "nonpayable" }],
+        functionName: func.name,
+        args,
+      });
+      
+      return callData;
+    } catch (err) {
+      console.error("Failed to encode function data:", err);
+      return null;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!validateAddress(to)) return;
 
+    let callData: Hex | undefined;
+    
+    if (txType === "contract") {
+      if (selectedFunction) {
+        // Generate from ABI
+        callData = generateCalldata() || undefined;
+      } else if (data) {
+        // Use raw calldata if provided
+        callData = data as Hex;
+      }
+    }
+
     const txId = await proposeTransaction({
       to: getAddress(to),
       value: value || "0",
-      data: txType === "contract" && data ? (data as Hex) : undefined,
-      description: description || (txType === "transfer" ? "ETH Transfer" : "Contract Interaction"),
+      data: callData,
+      description: description || (txType === "transfer" ? "ETH Transfer" : `${selectedFunction || "Contract"} Call`),
       type: txType === "transfer" ? "TRANSFER" : "CONTRACT_CALL",
       usePaymaster,
     });
@@ -410,7 +515,7 @@ function NewTransactionModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-text-secondary mb-2">
-              Recipient Address
+              {txType === "contract" ? "Contract Address" : "Recipient Address"}
             </label>
             <input
               type="text"
@@ -442,17 +547,86 @@ function NewTransactionModal({
           </div>
 
           {txType === "contract" && (
-            <div>
-              <label className="block text-sm font-medium text-text-secondary mb-2">
-                Call Data (hex)
-              </label>
-              <textarea
-                value={data}
-                onChange={(e) => setData(e.target.value)}
-                placeholder="0x..."
-                className="input font-mono text-sm h-24 resize-none"
-              />
-            </div>
+            <>
+              {/* ABI Input */}
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-2">
+                  Contract ABI
+                </label>
+                <textarea
+                  value={abiInput}
+                  onChange={(e) => {
+                    setAbiInput(e.target.value);
+                    parseAbi(e.target.value);
+                  }}
+                  placeholder='Paste contract ABI here (JSON format)...'
+                  className={`input font-mono text-xs h-24 resize-none ${abiError ? "border-status-error" : ""}`}
+                />
+                {abiError && (
+                  <p className="text-xs text-status-error mt-1">{abiError}</p>
+                )}
+                {parsedFunctions.length > 0 && (
+                  <p className="text-xs text-status-success mt-1">
+                    Found {parsedFunctions.length} writable function{parsedFunctions.length !== 1 ? "s" : ""}
+                  </p>
+                )}
+              </div>
+
+              {/* Function Selector */}
+              {parsedFunctions.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
+                    Function
+                  </label>
+                  <select
+                    value={selectedFunction}
+                    onChange={(e) => {
+                      setSelectedFunction(e.target.value);
+                      setFunctionParams({});
+                    }}
+                    className="input"
+                  >
+                    <option value="">Select a function...</option>
+                    {parsedFunctions.map((func) => (
+                      <option key={func.name} value={func.name}>
+                        {func.name}({func.inputs.map(i => `${i.type} ${i.name}`).join(", ")})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Function Parameters */}
+              {selectedFunction && parsedFunctions.find(f => f.name === selectedFunction)?.inputs.map((input) => (
+                <div key={input.name}>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
+                    {input.name} <span className="text-text-muted">({input.type})</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={functionParams[input.name] || ""}
+                    onChange={(e) => setFunctionParams(prev => ({ ...prev, [input.name]: e.target.value }))}
+                    placeholder={input.type === "address" ? "0x..." : input.type.includes("int") ? "0" : ""}
+                    className="input font-mono"
+                  />
+                </div>
+              ))}
+
+              {/* Fallback: Raw Calldata */}
+              {parsedFunctions.length === 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
+                    Raw Calldata (hex) <span className="text-text-muted text-xs">- or paste ABI above</span>
+                  </label>
+                  <textarea
+                    value={data}
+                    onChange={(e) => setData(e.target.value)}
+                    placeholder="0x..."
+                    className="input font-mono text-sm h-20 resize-none"
+                  />
+                </div>
+              )}
+            </>
           )}
 
           <div>

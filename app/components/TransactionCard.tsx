@@ -17,6 +17,7 @@ interface TransactionCardProps {
   status: "pending" | "executed" | "rejected" | "PENDING" | "READY" | "EXECUTED" | "FAILED" | "CANCELLED";
   safeTxHash?: Hex;
   paymasterAndData?: Hex | null;
+  executionTxHash?: string;
   signatures: {
     current: number;
     required: number;
@@ -25,6 +26,9 @@ interface TransactionCardProps {
   timestamp: string;
   onUpdate?: () => void;
 }
+
+// Sepolia Etherscan base URL
+const ETHERSCAN_BASE_URL = "https://sepolia.etherscan.io";
 
 export function TransactionCard({
   id,
@@ -37,6 +41,7 @@ export function TransactionCard({
   status,
   safeTxHash,
   paymasterAndData,
+  executionTxHash,
   signatures,
   timestamp,
   onUpdate,
@@ -184,6 +189,23 @@ export function TransactionCard({
           <span className={`badge ${statusConfig[normalizedStatus]?.badge || "badge-pending"}`}>
             {statusConfig[normalizedStatus]?.label || status}
           </span>
+          {/* Etherscan link for executed transactions */}
+          {normalizedStatus === "executed" && executionTxHash && (
+            <a
+              href={`${ETHERSCAN_BASE_URL}/tx/${executionTxHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-accent-primary hover:text-accent-secondary transition-colors"
+              title="View on Etherscan"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+              Explorer
+            </a>
+          )}
         </div>
       </div>
 

@@ -115,10 +115,10 @@ function DashboardContent() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-lg font-semibold text-text-primary mb-1">
-                  Wallet Address
+                  SafeSocial Multisig Wallet
                 </h2>
                 <p className="text-sm text-text-secondary">
-                  Your SafeSocial multisig contract on Sepolia
+                  Your multisig contract address on Sepolia
                 </p>
               </div>
               <button 
